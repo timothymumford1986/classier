@@ -31,7 +31,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API routes will be added here
+// Import routes
+import authRoutes from './routes/authRoutes.js';
+import scenarioRoutes from './routes/scenarioRoutes.js';
+
+// API routes
 app.get('/api', (req, res) => {
   res.json({
     message: 'Classier API',
@@ -39,6 +43,9 @@ app.get('/api', (req, res) => {
     status: 'development'
   });
 });
+
+app.use('/api/auth', authRoutes);
+app.use('/api/scenarios', scenarioRoutes);
 
 // 404 handler
 app.use((req, res) => {
