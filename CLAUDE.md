@@ -16,9 +16,12 @@ Managing these requests manually while creating balanced classes is time-consumi
 ## Key Features
 
 ### 1. Student Management
-- **Bulk Import**: Paste large student lists directly into the system
-- **Student Profiles**: Track additional metadata (gender, academic level, behavioral notes)
+- **NLP-Powered Input**: Paste student lists in any format - NLP extracts structured data automatically
+- **Flexible Data**: Works globally (not tied to specific country formats)
+- **Required Fields**: Name (minimum)
+- **Optional Metadata**: Gender, academic level, behavioral notes, student ID
 - **Year/Grade Organization**: Organize students by grade level or year groups
+- **Scale**: Supports 20-250 students per grade level
 
 ### 2. Class Configuration
 - **Flexible Setup**: Define number of classes, class names, teacher names
@@ -26,36 +29,51 @@ Managing these requests manually while creating balanced classes is time-consumi
 - **Multiple Scenarios**: Create and save different class configurations for comparison
 
 ### 3. Request Management
-- **Email Parsing**: Paste parent/student emails directly
+- **Text Snippet Input**: Paste text from parent/student communications (no email integration required)
 - **NLP Processing**: Natural language processing extracts placement requests from unstructured text
+  - Example: "My kid, Leo, shouldn't be with Gary" → Parsed to hard constraint
 - **Structured UI**: Parsed requests displayed in an organized, reviewable format
+- **Manual Entry**: Add constraints directly via forms
 - **Request Types**:
   - **Hard Constraints**: MUST be together / MUST NOT be together
   - **Soft Constraints**: PREFER to be together / PREFER NOT to be together
+- **Expected Volume**: 1-2 requests per student on average
 
 ### 4. Intelligent Sorting Algorithm
-The algorithm optimizes for:
-- Hard constraints (absolute must/must-not placements)
-- Soft constraints (preferences, weighted)
-- Gender balance across classes
-- Academic level distribution
-- Behavioral considerations
-- Class size targets
+The algorithm optimizes in priority order:
+1. **Class size balancing** (primary goal: equal or target class sizes)
+2. **Gender balance** across classes (target: 50/50 per class)
+3. **Hard constraints** (absolute must/must-not placements)
+4. **Soft constraints** (preferences, weighted)
+5. **Academic streaming** (optional, school-configurable)
+   - Schools can toggle "academic streaming" to create high/middle/low achievement classes
+   - When disabled, algorithm balances academic levels evenly
+6. **Behavioral considerations** (from teacher input and requests)
 
-**Conflict Detection**:
+**Conflict Detection & Resolution**:
 - Identifies contradictory requests (e.g., "Leo wants to be with Gary" vs "Gary doesn't want to be with Leo")
-- Alerts teachers to impossible constraints
-- Provides conflict resolution suggestions
+- **Teacher decides**: All conflicts flagged in real-time conflict pane for manual resolution
+- Impossible constraints highlighted immediately
+- No automatic conflict resolution - teacher maintains full control
 
 ### 5. Interactive Class Management UI
-- **Kanban-Style Board**: Drag-and-drop students between classes
-- **Real-Time Feedback**: Visual indicators for:
-  - Satisfied constraints (green)
-  - Violated constraints (red)
-  - Class balance metrics
-- **Conflict Pane**: Bottom panel shows active conflicts and unmet requests for selected student
+- **Dynamic Kanban Board**: Highly responsive drag-and-drop interface
+  - Drag student from one class to another
+  - **Instant feedback**: Conflicts appear immediately in bottom pane when student selected or moved
+  - Visual indicators update in real-time
+- **Real-Time Conflict Pane**: Bottom panel displays:
+  - Active conflicts for selected/moved student
+  - Violated hard constraints (red)
+  - Unmet soft constraints (yellow)
+  - Affected students and specific constraint violations
+  - All updates happen instantly as you drag/drop
+- **Visual Indicators**:
+  - Satisfied constraints (green checkmarks)
+  - Violated constraints (red warnings)
+  - Class balance metrics (gender ratio, size, academic distribution)
 - **Freeze Functionality**: Lock specific student placements while re-optimizing others
-- **Manual Overrides**: Move students freely with automatic constraint checking
+- **Manual Overrides**: Teacher has final say on all placements
+- **Undo/Redo**: Easy reversal of changes
 
 ### 6. Export & Reporting
 - Export finalized class lists (CSV, PDF, Excel)
@@ -68,6 +86,7 @@ The algorithm optimizes for:
 ### 7. Multi-Tenancy & Authentication
 - **School-Based Isolation**: Each school's data is completely separate
 - **Invitation System**: School admins can invite teachers
+- **Concurrent Usage**: Supports up to 20 teachers working simultaneously per school
 - **Multiple Auth Providers**:
   - Google Workspace
   - Microsoft/Azure AD
@@ -95,9 +114,15 @@ The algorithm optimizes for:
 ### Backend
 - Node.js with Express or similar framework
 - RESTful API or GraphQL
-- NLP service for email parsing (OpenAI API, AWS Comprehend, or custom)
-- Optimization algorithm service
+- **NLP service** for intelligent text parsing:
+  - Student list parsing (any format → structured data)
+  - Placement request extraction from parent communication text
+  - Options: OpenAI API, AWS Comprehend, or custom NLP model
+- **Optimization algorithm service**:
+  - Constraint satisfaction problem (CSP) solver
+  - Consider: Genetic algorithms, simulated annealing, or constraint programming libraries
 - Background job processing for heavy computations
+- WebSocket support for real-time UI updates
 
 ### Database
 - **PostgreSQL** for relational data
@@ -129,6 +154,9 @@ School
   - id
   - name
   - created_at
+  - settings (JSONB)
+    - academic_streaming_enabled (boolean)
+    - default_class_size (integer)
 
 User
   - id
@@ -136,13 +164,18 @@ User
   - school_id
   - role (admin, teacher)
   - auth_provider
+  - created_at
 
 Student
   - id
-  - name
+  - name (required)
   - school_id
   - grade_level
-  - metadata (gender, academic_level, behavioral_notes)
+  - gender (optional)
+  - academic_level (optional, manually set by teacher)
+  - behavioral_notes (optional, text)
+  - student_id (optional, for school systems that use it)
+  - created_at
 
 Class
   - id
@@ -152,11 +185,15 @@ Class
   - teacher_name
   - target_size
   - grade_level
+  - created_at
 
 ClassAssignment
+  - id
   - student_id
   - class_id
   - frozen (boolean)
+  - assigned_at
+  - manually_placed (boolean)
 
 PlacementRequest
   - id
@@ -166,8 +203,10 @@ PlacementRequest
   - target_student_id
   - type (together, not_together)
   - priority (hard, soft)
-  - source (email, manual)
+  - source (text_paste, manual)
   - original_text
+  - created_at
+  - created_by
 
 Scenario
   - id
@@ -176,52 +215,79 @@ Scenario
   - name
   - created_by
   - created_at
+  - last_optimized_at
 ```
 
 ## Algorithm Approach
 
-### Phase 1: Constraint Validation
-1. Parse all hard and soft constraints
+This is a **Constraint Satisfaction Problem (CSP)** with weighted priorities.
+
+### Phase 1: Input Validation & Preprocessing
+1. Parse all hard and soft constraints from NLP-extracted requests
 2. Detect conflicts and impossibilities
 3. Build constraint graph
-4. Report conflicts to user
+4. Identify frozen placements (if re-optimizing)
+5. **Flag conflicts to teacher** - no automatic resolution
 
 ### Phase 2: Initial Assignment
-1. Start with hard constraints (must-be-together, must-not-be-together)
-2. Create student groups based on must-be-together constraints
-3. Apply must-not-be-together constraints
-4. Distribute groups across classes
+1. Distribute students to balance **class sizes** first (highest priority)
+2. Apply **gender balance** (target: 50/50 per class)
+3. Apply **hard constraints** (must-be-together, must-not-be-together)
+   - Create student groups based on must-be-together constraints
+   - Ensure must-not-be-together constraints are satisfied
+4. Keep frozen placements locked during optimization
 
-### Phase 3: Optimization
-1. Score current configuration
-2. Apply genetic algorithm or simulated annealing
-3. Optimize for:
-   - Soft constraint satisfaction
-   - Gender balance (target: 50/50 per class)
-   - Academic level distribution
-   - Behavioral balance
-   - Class size targets
-4. Iteratively improve until convergence or time limit
+### Phase 3: Optimization Loop
+1. Score current configuration with weighted function:
+   - **Class size balance** (highest weight)
+   - **Gender balance** (second highest)
+   - **Hard constraint satisfaction** (very high penalty for violations)
+   - **Soft constraint satisfaction** (lower weight, best-effort)
+   - **Academic streaming** (if enabled by school)
+   - **Behavioral considerations** (from notes and requests)
+2. Apply optimization algorithm:
+   - Options: Genetic algorithm, simulated annealing, or constraint programming solver
+   - Iteratively improve until convergence or time limit
+3. Never move frozen students
+4. Maintain class size balance throughout
 
-### Phase 4: Manual Refinement
-1. Present results to teacher
-2. Allow drag-and-drop adjustments
-3. Re-score and show impact of changes
-4. Maintain frozen placements during re-optimization
+### Phase 4: Real-Time Manual Refinement
+1. Present results to teacher in Kanban UI
+2. **Dynamic updates**: When student is dragged/moved:
+   - Re-calculate scores instantly
+   - Update conflict pane in real-time
+   - Show visual feedback (red/green indicators)
+   - Display impact on class balance
+3. Teacher can:
+   - Freeze specific placements
+   - Manually override any assignment
+   - Re-run optimization with new constraints
+4. Frozen placements maintained during re-optimization
 
 ## User Workflows
 
-### Workflow 1: Initial Setup
+### Workflow 1: Initial Setup (Start of School Year)
 1. Teacher logs in via Google/Microsoft
 2. Selects grade level / year group
-3. Pastes student list
-4. Configures classes (number, names, sizes)
-5. Pastes parent emails
-6. Reviews parsed requests
-7. Adds manual constraints
-8. Runs sorting algorithm
-9. Reviews and adjusts results
-10. Freezes and exports final class lists
+3. **Pastes student list** (any format) - NLP structures the data
+   - Reviews extracted names and metadata
+   - Manually adds missing info (gender, academic level if desired)
+4. **Configures classes**: number, names, teacher names, target sizes
+5. **Pastes text snippets** from parent communications
+   - NLP extracts placement requests automatically
+   - Example: "Leo shouldn't be with Gary" → Hard constraint parsed
+6. **Reviews parsed requests** in structured UI
+   - Edits misunderstood requests
+   - Adds manual constraints via forms
+7. **Runs sorting algorithm**
+   - Algorithm generates initial class assignments
+   - Conflict detection runs automatically
+8. **Reviews results in Kanban UI**
+   - Drag-and-drop adjustments
+   - Bottom pane shows conflicts in real-time
+9. **Freezes satisfied placements**
+   - Re-run optimization for remaining students if needed
+10. **Exports final class lists** (CSV, PDF, Excel)
 
 ### Workflow 2: Mid-Year Adjustment
 1. Load existing scenario
@@ -246,33 +312,44 @@ Scenario
 - **Transparent**: Show why algorithm made specific decisions
 - **Accessible**: WCAG 2.1 AA compliance
 
-## MVP Feature Set
+## MVP Feature Set & Timeline
 
-**Phase 1 (MVP)**:
-- Single school setup
-- Google OAuth
-- Manual student list entry (CSV import)
-- Manual request entry (structured form)
-- Basic algorithm (hard constraints only)
-- Simple class assignment view
-- Basic export (CSV)
+**Target: 6 months to production-ready MVP**
 
-**Phase 2**:
-- Multi-school support
-- Email parsing with NLP
-- Soft constraints
-- Kanban drag-and-drop UI
-- Class balancing (gender, academic)
-- Scenario management
-- Microsoft auth
+**Phase 1 (MVP - Months 1-4)**:
+- **Multi-school architecture** built from day one (but launch with single pilot school)
+- **Authentication**: Google OAuth (Microsoft in Phase 2)
+- **Student input**: NLP-powered text paste for student lists
+- **Request input**: NLP-powered text paste + manual entry forms
+- **Algorithm**: Full CSP solver with priority weighting
+  - Class size balance
+  - Gender balance
+  - Hard constraints
+  - Soft constraints (best-effort)
+- **Dynamic Kanban UI**: Real-time drag-and-drop with instant conflict feedback
+- **Conflict pane**: Bottom panel with live updates
+- **Freeze functionality**: Lock placements during re-optimization
+- **Export**: CSV and PDF
+- **Security**: Full data isolation, encryption at rest
+- **Rollout**: Single pilot school
 
-**Phase 3**:
-- Advanced optimization algorithm
-- Behavioral balancing
-- Conflict resolution suggestions
-- Advanced reporting
-- Audit logging
-- Mobile-responsive design
+**Phase 2 (Post-MVP - Months 5-6)**:
+- **Multi-school rollout**: Onboard additional schools
+- **Microsoft/Azure AD** authentication
+- **Academic streaming** toggle (school setting)
+- **Advanced export**: Excel format, detailed reports
+- **Scenario comparison**: Side-by-side view
+- **Audit logging**: Track who made what changes
+- **Mobile-responsive** refinements
+
+**Phase 3 (Future - Months 7+)**:
+- **Improved NLP**: Machine learning for better parsing accuracy
+- **Historical analysis**: Learn from past year's successful configurations
+- **SIS integration**: Import from school management systems
+- **Collaborative editing**: Multiple teachers working simultaneously
+- **Advanced reporting**: Constraint satisfaction dashboards
+- **Language localization**
+- **Dark mode**
 
 ## Success Metrics
 
@@ -298,9 +375,20 @@ Scenario
 
 1. **Security First**: Data isolation and auth must be rock-solid
 2. **Core Algorithm**: Sorting logic is the heart of the product
-3. **Usability**: Teachers must find it easier than manual sorting
-4. **Performance**: Handle schools with 500+ students per grade
+   - Correct priority weighting (class size → gender → hard → soft)
+   - Fast optimization (handle 250 students per grade)
+   - Real-time conflict detection
+3. **Dynamic UI/UX**: Teachers must find it easier than manual sorting
+   - Instant feedback on drag-and-drop
+   - Real-time conflict pane updates
+   - Intuitive, minimal learning curve
+4. **Performance**:
+   - Handle 20-250 students per grade
+   - Support 20 concurrent teachers per school
+   - Real-time UI updates (< 100ms response time for drag operations)
 5. **Reliability**: Never lose data, always recoverable
+   - Auto-save scenarios
+   - Version history for rollback
 
 ## Future Enhancements
 
@@ -317,11 +405,26 @@ Scenario
 
 ## Questions & Decisions Log
 
-- How to handle mid-year student transfers?
+### Answered
+✅ **Scale**: 20-250 students per grade, 20 concurrent teachers per school
+✅ **Student input**: NLP-powered text paste (not just CSV)
+✅ **Request volume**: 1-2 requests per student on average
+✅ **Request input**: Text snippets pasted from parent communications (not email integration)
+✅ **Priority order**: Class size → Gender → Hard constraints → Soft constraints
+✅ **Academic streaming**: Optional, school-level toggle
+✅ **Conflict resolution**: Teacher decides, system only flags
+✅ **Siblings/twins in same grade**: No special handling, teacher overrides if needed
+✅ **Special education**: Teacher handles via manual overrides
+✅ **Timeline**: 6 months to MVP
+✅ **Rollout**: Single pilot school, multi-school architecture from day one
+✅ **Global**: Not US-centric, flexible metadata fields
+
+### Open Questions
+- How to handle mid-year student transfers? (Workflow 2 covers basics)
 - Should we support cross-grade constraints (siblings in different grades)?
-- What's the maximum number of students we need to support per scenario?
 - Should scenarios be shareable across schools (anonymized templates)?
 - How long should we retain historical data?
+- Should we support bulk student removal/archiving at end of year?
 
 ## Project Name
 
