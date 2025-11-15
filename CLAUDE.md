@@ -112,15 +112,17 @@ The algorithm optimizes in priority order:
 - Accessible and intuitive interface
 
 ### Backend
-- Node.js with Express or similar framework
+- Node.js v18+ with Express or similar framework
 - RESTful API or GraphQL
 - **NLP service** for intelligent text parsing:
   - Student list parsing (any format → structured data)
   - Placement request extraction from parent communication text
-  - Options: OpenAI API, AWS Comprehend, or custom NLP model
+  - **Google Gemini API** (@google/genai npm package)
 - **Optimization algorithm service**:
   - Constraint satisfaction problem (CSP) solver
-  - Consider: Genetic algorithms, simulated annealing, or constraint programming libraries
+  - **genetic-js** - Genetic algorithm for multi-objective optimization
+  - **simulated-annealing** - Alternative optimization approach
+  - Custom CSP logic for hard constraints
 - Background job processing for heavy computations
 - WebSocket support for real-time UI updates
 
