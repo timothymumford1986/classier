@@ -12,6 +12,12 @@ export const useScenarioStore = create((set, get) => ({
   conflicts: [],
   loading: false,
 
+  // Undo/Redo state
+  history: [],
+  historyIndex: -1,
+  canUndo: false,
+  canRedo: false,
+
   fetchScenarios: async (schoolId) => {
     try {
       set({ loading: true });
@@ -124,6 +130,9 @@ export const useScenarioStore = create((set, get) => ({
 
   updateAssignment: async (scenarioId, studentId, classId, options = {}) => {
     try {
+      // Save current state to history before making change
+      get().saveToHistory();
+
       const response = await scenarioAPI.updateAssignment(scenarioId, {
         studentId,
         classId,
@@ -192,5 +201,59 @@ export const useScenarioStore = create((set, get) => ({
       .map(a => a.student_id);
 
     return state.students.filter(s => studentIds.includes(s.id));
+  },
+
+  // Undo/Redo functionality
+  saveToHistory: () => {
+    const state = get();
+    const snapshot = JSON.parse(JSON.stringify(state.assignments));
+
+    // Remove any history after current index (when user makes change after undo)
+    const newHistory = state.history.slice(0, state.historyIndex + 1);
+    newHistory.push(snapshot);
+
+    // Limit history to last 50 states
+    const trimmedHistory = newHistory.slice(-50);
+
+    set({
+      history: trimmedHistory,
+      historyIndex: trimmedHistory.length - 1,
+      canUndo: trimmedHistory.length > 1,
+      canRedo: false
+    });
+  },
+
+  undo: () => {
+    const state = get();
+    if (state.historyIndex > 0) {
+      const newIndex = state.historyIndex - 1;
+      const previousState = state.history[newIndex];
+
+      set({
+        assignments: JSON.parse(JSON.stringify(previousState)),
+        historyIndex: newIndex,
+        canUndo: newIndex > 0,
+        canRedo: true
+      });
+
+      toast.success('Undone');
+    }
+  },
+
+  redo: () => {
+    const state = get();
+    if (state.historyIndex < state.history.length - 1) {
+      const newIndex = state.historyIndex + 1;
+      const nextState = state.history[newIndex];
+
+      set({
+        assignments: JSON.parse(JSON.stringify(nextState)),
+        historyIndex: newIndex,
+        canUndo: true,
+        canRedo: newIndex < state.history.length - 1
+      });
+
+      toast.success('Redone');
+    }
   },
 }));

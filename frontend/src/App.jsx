@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
 import { DashboardPage } from './pages/DashboardPage';
 import { ScenarioPage } from './pages/ScenarioPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 const LoginPage = () => {
   const { setAuth } = useAuthStore();
@@ -109,6 +110,14 @@ function App() {
           element={
             <PrivateRoute>
               <ScenarioPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <PrivateRoute>
+              <SettingsPage />
             </PrivateRoute>
           }
         />

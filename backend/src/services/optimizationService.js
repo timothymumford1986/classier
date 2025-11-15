@@ -1,8 +1,27 @@
 import Genetic from 'genetic-js';
 
 /**
+ * ═══════════════════════════════════════════════════════════════════
+ * LOCAL OPTIMIZATION ENGINE - NO AI/LLM USED FOR OPTIMIZATION
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * This is a pure mathematical optimization using genetic algorithms.
+ *
+ * LLMs (Google Gemini) are ONLY used for:
+ *   ✓ Parsing unstructured student lists from teachers
+ *   ✓ Extracting placement requests from parent emails
+ *
+ * The optimization itself runs entirely locally using:
+ *   ✓ Constraint satisfaction algorithms
+ *   ✓ Genetic algorithms (population-based search)
+ *   ✓ Mathematical fitness functions
+ *
+ * NO external API calls during optimization - fully local and deterministic.
+ *
+ * ═══════════════════════════════════════════════════════════════════
  * Class assignment optimizer using genetic algorithms
  * Priority order: Class size → Gender → Hard constraints → Soft constraints
+ * ═══════════════════════════════════════════════════════════════════
  */
 
 export class ClassOptimizer {
